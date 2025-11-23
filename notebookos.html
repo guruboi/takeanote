@@ -10,9 +10,9 @@
     <title>NotebookOS: Ultimate AI</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <link rel="manifest" id="my-manifest">
-    <link rel="apple-touch-icon" id="apple-icon">
-    <link rel="icon" type="image/png" id="favicon">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="icon" type="image/png" href="icons/icon-192x192.png">
 
     <style>
         :root {
@@ -307,21 +307,18 @@
 <script>
     const apiKey = ""; 
 
-    (function setupPWA() {
-        const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
-        const ctx = canvas.getContext('2d'); ctx.fillStyle = '#1e1f20'; ctx.fillRect(0,0,512,512);
-        ctx.fillStyle = '#a8c7fa'; ctx.font = 'bold 300px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('N', 256, 256);
-        const iconUrl = canvas.toDataURL('image/png');
-        document.getElementById('apple-icon').href = iconUrl; document.getElementById('favicon').href = iconUrl;
-        const manifest = { name: "NotebookOS", short_name: "Notebook", start_url: ".", display: "standalone", background_color: "#131314", theme_color: "#131314", icons: [{ src: iconUrl, sizes: "512x512", type: "image/png" }] };
-        const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-        document.getElementById('my-manifest').href = URL.createObjectURL(manifestBlob);
-        if ('serviceWorker' in navigator) {
-            const swCode = `self.addEventListener('install', e => self.skipWaiting()); self.addEventListener('activate', e => e.waitUntil(self.clients.claim())); self.addEventListener('fetch', e => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });`;
-            const swBlob = new Blob([swCode], {type: 'application/javascript'});
-            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(e=>{});
-        }
-    })();
+    // Register service worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                })
+                .catch(error => {
+                    console.log('ServiceWorker registration failed: ', error);
+                });
+        });
+    }
 
     const CONFIG = { xSpacing: 300, ySpacing: 70, subSteps: 4 };
     const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
@@ -578,11 +575,65 @@
     function setCanvasBG(input) { if(input.files[0]){const r=new FileReader(); r.onload=e=>{document.body.style.backgroundImage=`url(${e.target.result})`;document.body.style.backgroundSize='cover';}; r.readAsDataURL(input.files[0]);} }
     document.getElementById('bgPicker').addEventListener('input', e => { document.body.style.backgroundImage='none'; document.documentElement.style.setProperty('--bg-color', e.target.value); });
     function toggleLogin() { document.getElementById('profile-label').innerText = "User Logged In"; alert("Logged In"); }
-    function saveToCloud() { alert("Saved!"); localStorage.setItem('notebook_data', JSON.stringify(nodes)); }
+    function saveToCloud() { 
+    alert("Saved!");
+    localStorage.setItem('notebook_data', JSON.stringify(nodes));
+    
+    // Send data to service worker for caching
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SAVE_DATA',
+            payload: nodes
+        });
+    }
+}
     function isDone(n) { if(n.done)return true; if(n.parentId)return isDone(nodes.find(x=>x.id===n.parentId)); return false; }
     function isVisible(n) { if(!n.parentId)return true; const p=nodes.find(x=>x.id===n.parentId); return p&&!p.collapsed&&isVisible(p); }
-    const saved = localStorage.getItem('notebook_data'); if(saved) { try { nodes = JSON.parse(saved); } catch(e){} }
-    resetView(); render();
+    // Load data from localStorage first, then check service worker cache as fallback
+const saved = localStorage.getItem('notebook_data'); 
+let hasData = false;
+
+if(saved) { 
+    try { 
+        nodes = JSON.parse(saved); 
+        hasData = true;
+    } catch(e){
+        console.error("Error parsing saved data:", e);
+    }
+} else {
+    // Try to get data from service worker cache
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+                // Request data from service worker
+                const messageChannel = new MessageChannel();
+                messageChannel.port1.onmessage = event => {
+                    if (event.data && event.data.type === 'GET_DATA_RESPONSE' && event.data.payload) {
+                        try {
+                            nodes = event.data.payload;
+                            hasData = true;
+                            resetView();
+                            render(); // Re-render with the loaded data
+                        } catch(e) {
+                            console.error("Error loading data from service worker:", e);
+                        }
+                    }
+                };
+                registration.active.postMessage({type: 'GET_DATA_REQUEST'}, [messageChannel.port2]);
+            }
+        });
+    }
+}
+
+// Initialize the app with either loaded data or default state
+if (hasData) {
+    resetView();
+    render();
+} else {
+    // If no data was loaded, still initialize the view
+    resetView();
+    render();
+}
 </script>
 </body>
 </html>
