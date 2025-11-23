@@ -13,6 +13,9 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192x192.png">
     <link rel="icon" type="image/png" href="icons/icon-192x192.png">
+    
+    <!-- Google Platform Library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <style>
         :root {
@@ -27,6 +30,79 @@
             --done-color: #81c995;
             --safe-top: env(safe-area-inset-top);
             --safe-bottom: env(safe-area-inset-bottom);
+        }
+        
+        /* Login Modal Styles */
+        #login-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 7000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .login-content {
+            width: 90%;
+            max-width: 400px;
+            background: #1e1f20;
+            border-radius: 16px;
+            padding: 30px;
+            position: relative;
+            text-align: center;
+            color: #fff;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        
+        .login-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .google-login-btn {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .google-login-btn:hover {
+            background: #3367d6;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
         }
 
         * { box-sizing: border-box; outline: none; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -303,6 +379,27 @@
             <div id="mediaViewer"></div>
         </div>
     </div>
+    
+    <!-- Login Modal -->
+    <div class="modal" id="login-modal">
+        <div class="login-content">
+            <div class="close-modal" onclick="closeLoginModal()">✕</div>
+            <h2>Login to NotebookOS</h2>
+            <div id="user-info" class="user-info" style="display: none;">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div>
+                    <div id="user-name">User Name</div>
+                    <div id="user-email" style="font-size: 14px; color: #aaa;">user@example.com</div>
+                </div>
+            </div>
+            <div id="login-buttons" class="login-buttons">
+                <div id="google-login-container"></div>
+                <button class="google-login-btn" onclick="googleLogin()" style="display: none;">
+                    <span>🔍</span> Sign in with Google (Fallback)
+                </button>
+            </div>
+        </div>
+    </div>
 
 <script>
     const apiKey = ""; 
@@ -550,7 +647,58 @@
     function updateText(id, el) { const n = nodes.find(x=>x.id===id); n.text = el.innerText; n.updatedAt = new Date().toLocaleString(); }
     function deleteNode(id) { if(window.event) window.event.stopPropagation(); const ids = [id]; const gather = (pid) => nodes.forEach(n => { if(n.parentId===pid){ ids.push(n.id); gather(n.id); }}); gather(id); nodes = nodes.filter(n => !ids.includes(n.id)); ids.forEach(k => document.getElementById(k)?.remove()); }
     function toggleSidebar(side) { const el = document.getElementById(`sidebar-${side}`); el.classList.toggle('active'); if(side==='left'&&el.classList.contains('active'))document.getElementById('sidebar-right').classList.remove('active'); if(side==='right'&&el.classList.contains('active'))document.getElementById('sidebar-left').classList.remove('active'); }
-    function toggleApp(appName) { const p=document.getElementById('app-panel'); const f=document.getElementById('app-frame'); const t=document.getElementById('app-title'); toggleSidebar('right'); if(!appName){p.classList.remove('open');return;} p.classList.add('open'); f.removeAttribute('src'); f.removeAttribute('srcdoc'); if(appName==='cal'){t.innerText="Calendar";f.src="https://calendar.google.com/calendar/embed?src=en.usa%23holiday%40group.v.calendar.google.com&ctz=UTC";}else if(appName==='sheets'){t.innerText="Sheets";f.src="https://docs.google.com/spreadsheets/d/e/2PACX-1vRz4WnF4w7CjH8Y-xZkF8wZg_e_z-z_z-z/pubhtml?widget=true&headers=false";}else if(appName==='mail'){t.innerText="Gmail";f.srcdoc=`<body style="background:#1e1f20;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100%"><h2>Gmail Integration</h2><p>Click to open</p><a href="https://mail.google.com" target="_blank" style="color:#a8c7fa">Open Gmail</a></body>`;}else{t.innerText="Word";f.srcdoc=`<body style="background:#1e1f20;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100%"><h2>Word Integration</h2><a href="https://office.com" target="_blank" style="color:#a8c7fa">Open Word</a></body>`;} }
+    function toggleApp(appName) { 
+        const p = document.getElementById('app-panel'); 
+        const f = document.getElementById('app-frame'); 
+        const t = document.getElementById('app-title'); 
+        toggleSidebar('right'); 
+        if(!appName){p.classList.remove('open');return;} 
+        p.classList.add('open'); 
+        f.removeAttribute('src'); 
+        f.removeAttribute('srcdoc'); 
+        if(appName==='cal'){
+            t.innerText = "Calendar";
+            // Check if user is logged in
+            const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+            if (user) {
+                // Use the logged-in user's calendar
+                f.src = "https://calendar.google.com/calendar/u/0/r?pli=1";
+            } else {
+                // Show login prompt or public calendar
+                f.src = "https://calendar.google.com/calendar/embed?src=en.usa%23holiday%40group.v.calendar.google.com&ctz=UTC";
+            }
+        } else if(appName==='sheets'){
+            t.innerText = "Sheets";
+            const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+            if (user) {
+                // Use the logged-in user's Sheets
+                f.src = "https://docs.google.com/spreadsheets/u/0/";
+            } else {
+                // Show login prompt or demo sheet
+                f.src = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRz4WnF4w7CjH8Y-xZkF8wZg_e_z-z_z-z/pubhtml?widget=true&headers=false";
+            }
+        } else if(appName==='mail'){
+            t.innerText = "Gmail";
+            const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+            if (user) {
+                // Use the logged-in user's Gmail
+                f.src = "https://mail.google.com/mail/u/0/";
+            } else {
+                // Show login prompt or placeholder
+                f.srcdoc = `<body style="background:#1e1f20;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100%"><h2>Please log in to access Gmail</h2><button onclick="toggleLogin()" style="background:#4285f4;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">Login</button></body>`;
+            }
+        } else if(appName==='word'){
+            t.innerText = "Docs";
+            const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+            if (user) {
+                // Use the logged-in user's Docs
+                f.src = "https://docs.google.com/document/u/0/";
+            } else {
+                // Show login prompt or placeholder
+                f.srcdoc = `<body style="background:#1e1f20;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100%"><h2>Please log in to access Docs</h2><button onclick="toggleLogin()" style="background:#4285f4;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">Login</button></body>`;
+            }
+        }
+    }
     function openContext(e, node) { e.preventDefault(); if(window.getSelection) window.getSelection().removeAllRanges(); state.contextNodeId = node.id; const m = document.getElementById('context-menu'); let x = e.clientX; let y = e.clientY; if(x+200>window.innerWidth)x=window.innerWidth-210; if(y+300>window.innerHeight)y=window.innerHeight-310; m.style.display='block'; m.style.left=x+'px'; m.style.top=y+'px'; }
     function showNodeDetails() { closeCtx(); const n = nodes.find(x=>x.id===state.contextNodeId); document.getElementById('mediaViewer').innerHTML = `<h3>Node Details</h3><p>ID: ${n.id}</p><p>Created: ${n.createdAt}</p>`; document.getElementById('mediaModal').style.display = 'flex'; }
     function triggerMediaUpload() { document.getElementById('mediaInput').click(); closeCtx(); }
@@ -574,7 +722,153 @@
     function resetView() { view={x:window.innerWidth/2, y:window.innerHeight/2, scale:1}; updateTransform(); }
     function setCanvasBG(input) { if(input.files[0]){const r=new FileReader(); r.onload=e=>{document.body.style.backgroundImage=`url(${e.target.result})`;document.body.style.backgroundSize='cover';}; r.readAsDataURL(input.files[0]);} }
     document.getElementById('bgPicker').addEventListener('input', e => { document.body.style.backgroundImage='none'; document.documentElement.style.setProperty('--bg-color', e.target.value); });
-    function toggleLogin() { document.getElementById('profile-label').innerText = "User Logged In"; alert("Logged In"); }
+    function toggleLogin() { 
+        // Check if user is already logged in
+        const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+        if (user) {
+            // User is logged in, show user info and offer logout
+            document.getElementById('profile-label').innerHTML = user.name || user.email + ' <span style="font-size:12px;color:#aaa;">(click to logout)</span>';
+            document.getElementById('profile-label').onclick = function() {
+                if (confirm("Are you sure you want to logout?")) {
+                    logout();
+                }
+            };
+            showUserInfo(user);
+        } else {
+            // User is not logged in, show login modal
+            document.getElementById('login-modal').style.display = 'flex';
+            // Reset the click handler
+            document.getElementById('profile-label').onclick = toggleLogin;
+        }
+    }
+    
+    // Initialize Google login when Google Platform Library loads
+    function initializeGoogleLogin() {
+        // This function will be called when the Google Platform Library is loaded
+        if (window.google) {
+            // Add a button for the Google Sign-In
+            google.accounts.id.initialize({
+                client_id: "YOUR_GOOGLE_CLIENT_ID", // This would be replaced with your actual client ID
+                callback: handleGoogleLogin,
+                auto_select: false
+            });
+            
+            // Render the Google Sign-In button
+            google.accounts.id.renderButton(
+                document.getElementById("google-login-container"),
+                { theme: "outline", size: "large", width: "300px" }
+            );
+        }
+    }
+    
+    function handleGoogleLogin(response) {
+        // Decode the JWT to get user info
+        const userObject = parseJwt(response.credential);
+        
+        // Save user data to localStorage
+        const userData = {
+            name: userObject.name,
+            email: userObject.email,
+            avatar: userObject.picture,
+            sub: userObject.sub
+        };
+        
+        localStorage.setItem('google_user', JSON.stringify(userData));
+        
+        // Update UI
+        document.getElementById('profile-label').innerText = userObject.name;
+        showUserInfo(userData);
+        
+        // Close the login modal
+        closeLoginModal();
+    }
+    
+    function googleLogin() {
+        // For a real implementation, you would use Google's OAuth API
+        // For this demo, we'll simulate a login with mock data
+        const mockUser = {
+            name: "John Doe",
+            email: "john.doe@gmail.com",
+            avatar: "JD"
+        };
+        
+        // Save user data to localStorage
+        localStorage.setItem('google_user', JSON.stringify(mockUser));
+        
+        // Update UI
+        document.getElementById('profile-label').innerText = mockUser.name;
+        showUserInfo(mockUser);
+        
+        // Close the login modal
+        closeLoginModal();
+        
+        // In a real implementation, you would trigger the Google login flow here
+        // google.accounts.id.prompt();
+    }
+    
+    function showUserInfo(user) {
+        document.getElementById('user-name').innerText = user.name;
+        document.getElementById('user-email').innerText = user.email;
+        if (user.avatar && user.avatar.startsWith('http')) {
+            document.getElementById('user-avatar').innerHTML = `<img src="${user.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+        } else {
+            document.getElementById('user-avatar').innerText = user.avatar || user.name.charAt(0).toUpperCase();
+        }
+        document.getElementById('user-info').style.display = 'flex';
+        document.getElementById('login-buttons').style.display = 'none';
+    }
+    
+    function closeLoginModal() {
+        document.getElementById('login-modal').style.display = 'none';
+        // Reset the login modal to show login buttons if not logged in
+        const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+        if (!user) {
+            document.getElementById('user-info').style.display = 'none';
+            document.getElementById('login-buttons').style.display = 'flex';
+        }
+    }
+    
+    function logout() {
+        localStorage.removeItem('google_user');
+        document.getElementById('profile-label').innerText = 'Login / Profile';
+        document.getElementById('user-info').style.display = 'none';
+        document.getElementById('login-buttons').style.display = 'flex';
+        closeLoginModal();
+    }
+    
+    // JWT parsing function to decode Google's response
+    function parseJwt(token) {
+        try {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        } catch (e) {
+            console.error("Error parsing JWT:", e);
+            return null;
+        }
+    }
+    
+    // Set up Google login when page loads
+    window.onload = function() {
+        // Check if user is already logged in
+        const user = JSON.parse(localStorage.getItem('google_user') || 'null');
+        if (user) {
+            document.getElementById('profile-label').innerHTML = user.name || user.email + ' <span style="font-size:12px;color:#aaa;">(click to logout)</span>';
+            document.getElementById('profile-label').onclick = function() {
+                if (confirm("Are you sure you want to logout?")) {
+                    logout();
+                }
+            };
+        } else {
+            document.getElementById('profile-label').onclick = toggleLogin;
+        }
+        
+        // Initialize Google login (will only work if the Google library has loaded)
+        setTimeout(initializeGoogleLogin, 1000);
+    };
     function saveToCloud() { 
     alert("Saved!");
     localStorage.setItem('notebook_data', JSON.stringify(nodes));
